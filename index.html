@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arcade Bubble Shooter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: white;
+            overflow: hidden;
+            touch-action: none;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            touch-action: none;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .btn-link {
+            transition: all 0.2s ease;
+        }
+        .btn-link:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.1);
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-start min-h-screen p-2 sm:p-4">
+
+    <!-- Header with Links -->
+    <div class="w-full max-w-md flex flex-col gap-2 mb-3 px-2">
+        <div class="flex justify-between items-center">
+            <h1 class="text-xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+                BUBBLE MATCH
+            </h1>
+            <div class="flex items-center gap-4">
+                <div class="text-lg font-mono font-bold">Score: <span id="score" class="text-blue-400">0</span></div>
+            </div>
+        </div>
+        
+        <div class="flex gap-2">
+            <a href="https://www.fik-rago.top/" target="_blank" class="btn-link flex-1 bg-slate-800 border border-slate-700 py-1.5 px-3 rounded-lg text-[10px] font-bold text-center uppercase tracking-wider text-slate-300">
+                Visit Website
+            </a>
+            <a href="https://paypal.me/websiteMA" target="_blank" class="btn-link flex-1 bg-yellow-600/20 border border-yellow-500/50 py-1.5 px-3 rounded-lg text-[10px] font-bold text-center uppercase tracking-wider text-yellow-500">
+                Donate ❤️
+            </a>
+        </div>
+    </div>
+
+    <div class="relative group">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- Game Over / Victory Overlay -->
+        <div id="msgBox" class="hidden absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-50 rounded-xl">
+            <div class="text-center p-6 bg-slate-800 rounded-2xl border border-slate-600 mx-4 w-full max-w-[280px]">
+                <h2 id="msgTitle" class="text-3xl font-bold mb-2">GAME OVER</h2>
+                <p id="msgScore" class="text-lg mb-4 text-slate-300">Final Score: 0</p>
+                
+                <button onclick="resetGame()" class="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold transition-all transform active:scale-95 mb-4">
+                    PLAY AGAIN
+                </button>
+
+                <div class="pt-4 border-t border-slate-700">
+                    <p class="text-[10px] text-slate-400 mb-2 uppercase tracking-widest font-bold">Support the Developer</p>
+                    <a href="https://paypal.me/websiteMA" target="_blank" class="block w-full py-2 bg-yellow-600 text-black text-sm rounded-lg font-bold">
+                        Support with PayPal
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="mt-4 text-center px-4">
+        <p class="text-slate-500 text-[10px] uppercase tracking-widest mb-1">Developed by</p>
+        <a href="https://www.fik-rago.top/" target="_blank" class="text-blue-400 font-bold hover:underline text-sm">
+            fik-rago.top
+        </a>
+    </div>
+
+    <script>
+        /** @type {HTMLCanvasElement} */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const msgBox = document.getElementById('msgBox');
+        const msgTitle = document.getElementById('msgTitle');
+        const msgScore = document.getElementById('msgScore');
+
+        const BUBBLE_RADIUS = 14; 
+        const GRID_ROWS = 14;
+        const GRID_COLS = 10;
+        const COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7', '#06b6d4'];
+
+        let grid = [];
+        let score = 0;
+        let isGameOver = false;
+        let currentBubble = null;
+        let nextColor = COLORS[0];
+        let mouseX = 0;
+        let mouseY = 0;
+
+        function initCanvas() {
+            const gameWidth = (GRID_COLS * BUBBLE_RADIUS * 2) + BUBBLE_RADIUS;
+            const maxHeight = window.innerHeight * 0.6; // Reduced height to ensure footer visibility
+            canvas.width = gameWidth;
+            canvas.height = Math.min(maxHeight, 480);
+            mouseX = canvas.width / 2;
+            mouseY = 0;
+        }
+
+        class Bubble {
+            constructor(x, y, color, isMoving = false) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.radius = BUBBLE_RADIUS;
+                this.dx = 0;
+                this.dy = 0;
+                this.speed = 16;
+                this.isMoving = isMoving;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius - 1, 0, Math.PI * 2);
+                
+                let gradient = ctx.createRadialGradient(
+                    this.x - this.radius/3, this.y - this.radius/3, this.radius/10,
+                    this.x, this.y, this.radius
+                );
+                gradient.addColorStop(0, '#ffffff');
+                gradient.addColorStop(0.3, this.color);
+                gradient.addColorStop(1, '#000000');
+                
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                ctx.closePath();
+                ctx.restore();
+            }
+
+            update() {
+                if (!this.isMoving) return;
+
+                this.x += this.dx;
+                this.y += this.dy;
+
+                if (this.x - this.radius < 0 || this.x + this.radius > canvas.width) {
+                    this.dx *= -1;
+                    this.x = (this.x - this.radius < 0) ? this.radius : canvas.width - this.radius;
+                }
+
+                if (this.y - this.radius < 0) {
+                    this.snapToGrid();
+                    return;
+                }
+
+                for (let r = 0; r < grid.length; r++) {
+                    if (!grid[r]) continue;
+                    for (let c = 0; c < grid[r].length; c++) {
+                        let b = grid[r][c];
+                        if (b) {
+                            let dist = Math.hypot(this.x - b.x, this.y - b.y);
+                            if (dist < this.radius * 1.7) {
+                                this.snapToGrid();
+                                return;
+                            }
+                        }
+                    }
+                }
+                
+                if (this.y > canvas.height) createNewBubble();
+            }
+
+            snapToGrid() {
+                this.isMoving = false;
+                let row = Math.round(this.y / (this.radius * 1.7));
+                let offset = (row % 2 === 0) ? 0 : this.radius;
+                let col = Math.round((this.x - offset - this.radius) / (this.radius * 2));
+
+                col = Math.max(0, Math.min(GRID_COLS - (row % 2 === 0 ? 1 : 0), col));
+                
+                if (row >= GRID_ROWS - 2) { 
+                    endGame(false);
+                    return;
+                }
+
+                if (!grid[row]) grid[row] = [];
+                if (grid[row][col]) {
+                    row++;
+                    if (row >= GRID_ROWS - 2) { endGame(false); return; }
+                    if (!grid[row]) grid[row] = [];
+                }
+
+                let finalX = col * (this.radius * 2) + this.radius + ((row % 2 === 0) ? 0 : this.radius);
+                let finalY = row * (this.radius * 1.7) + this.radius;
+
+                grid[row][col] = new Bubble(finalX, finalY, this.color);
+                
+                handleMatches(row, col);
+                createNewBubble();
+            }
+        }
+
+        function handleMatches(row, col) {
+            let matches = findMatches(row, col, grid[row][col].color);
+            if (matches.length >= 3) {
+                matches.forEach(m => { grid[m.r][m.c] = null; score += 10; });
+                scoreEl.innerText = score;
+                dropFloatingBubbles();
+            }
+        }
+
+        function findMatches(row, col, color, visited = new Set()) {
+            let key = `${row},${col}`;
+            if (visited.has(key) || !grid[row] || !grid[row][col] || grid[row][col].color !== color) return [];
+            visited.add(key);
+            let matches = [{r: row, c: col}];
+            getNeighbors(row, col).forEach(n => {
+                matches = matches.concat(findMatches(n.r, n.c, color, visited));
+            });
+            return matches;
+        }
+
+        function getNeighbors(r, c) {
+            let neighbors = [];
+            let odd = r % 2 !== 0;
+            let offsets = odd 
+                ? [[0,-1],[0,1],[-1,0],[-1,1],[1,0],[1,1]]
+                : [[0,-1],[0,1],[-1,-1],[-1,0],[1,-1],[1,0]];
+            
+            offsets.forEach(o => {
+                let nr = r + o[0], nc = c + o[1];
+                if (nr >= 0 && nr < GRID_ROWS && nc >= 0 && nc < GRID_COLS) neighbors.push({r: nr, c: nc});
+            });
+            return neighbors;
+        }
+
+        function dropFloatingBubbles() {
+            let connected = new Set();
+            for (let c = 0; c < GRID_COLS; c++) {
+                if (grid[0] && grid[0][c]) traverseConnected(0, c, connected);
+            }
+            for (let r = 0; r < GRID_ROWS; r++) {
+                if (!grid[r]) continue;
+                for (let c = 0; c < grid[r].length; c++) {
+                    if (grid[r][c] && !connected.has(`${r},${c}`)) {
+                        grid[r][c] = null;
+                        score += 5;
+                    }
+                }
+            }
+            scoreEl.innerText = score;
+        }
+
+        function traverseConnected(r, c, connected) {
+            let key = `${r},${c}`;
+            if (connected.has(key) || !grid[r] || !grid[r][c]) return;
+            connected.add(key);
+            getNeighbors(r, c).forEach(n => traverseConnected(n.r, n.c, connected));
+        }
+
+        function createNewBubble() {
+            let color = nextColor;
+            nextColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+            currentBubble = new Bubble(canvas.width / 2, canvas.height - 35, color);
+            
+            let remaining = false;
+            grid.forEach(row => row && row.forEach(b => { if(b) remaining = true; }));
+            if (!remaining && score > 0) endGame(true);
+        }
+
+        function initGrid() {
+            grid = [];
+            for (let r = 0; r < 5; r++) {
+                grid[r] = [];
+                for (let c = 0; c < (r % 2 === 0 ? GRID_COLS : GRID_COLS - 1); c++) {
+                    let x = c * (BUBBLE_RADIUS * 2) + BUBBLE_RADIUS + (r % 2 === 0 ? 0 : BUBBLE_RADIUS);
+                    let y = r * (BUBBLE_RADIUS * 1.7) + BUBBLE_RADIUS;
+                    grid[r][c] = new Bubble(x, y, COLORS[Math.floor(Math.random() * COLORS.length)]);
+                }
+            }
+        }
+
+        function resetGame() {
+            score = 0;
+            scoreEl.innerText = "0";
+            isGameOver = false;
+            msgBox.classList.add('hidden');
+            initGrid();
+            nextColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+            createNewBubble();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function endGame(won) {
+            isGameOver = true;
+            msgTitle.innerText = won ? "VICTORY!" : "GAME OVER";
+            msgScore.innerText = `Final Score: ${score}`;
+            msgBox.classList.remove('hidden');
+        }
+
+        function gameLoop() {
+            if (isGameOver) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (!currentBubble.isMoving) {
+                ctx.beginPath();
+                ctx.setLineDash([4, 4]);
+                ctx.moveTo(currentBubble.x, currentBubble.y);
+                ctx.lineTo(mouseX, mouseY);
+                ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            grid.forEach(row => row && row.forEach(b => { if(b) b.draw(); }));
+            currentBubble.update();
+            currentBubble.draw();
+
+            ctx.beginPath();
+            ctx.arc(canvas.width/2, canvas.height + 10, 40, Math.PI, 0);
+            ctx.fillStyle = '#1e293b';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(canvas.width/2 + 45, canvas.height - 15, 7, 0, Math.PI * 2);
+            ctx.fillStyle = nextColor;
+            ctx.fill();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function updatePointer(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+            const clientY = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
+            mouseX = clientX - rect.left;
+            mouseY = clientY - rect.top;
+        }
+
+        function shoot(e) {
+            if (isGameOver || currentBubble.isMoving) return;
+            updatePointer(e);
+            let angle = Math.atan2(mouseY - currentBubble.y, mouseX - currentBubble.x);
+            currentBubble.dx = Math.cos(angle) * currentBubble.speed;
+            currentBubble.dy = Math.sin(angle) * currentBubble.speed;
+            currentBubble.isMoving = true;
+        }
+
+        window.addEventListener('mousemove', updatePointer);
+        window.addEventListener('mousedown', shoot);
+        window.addEventListener('touchstart', (e) => { shoot(e); }, {passive: false});
+        window.addEventListener('touchmove', (e) => { updatePointer(e); e.preventDefault(); }, {passive: false});
+
+        initCanvas();
+        resetGame();
+    </script>
+</body>
+</html>
